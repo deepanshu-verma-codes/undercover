@@ -152,3 +152,24 @@ This week UnderCover goes into production on AWS, and the free route uses Render
 | `git checkout week3day4-end` | The agent as an AgentCore app, and Sign off or Send back for a claim waiting on a handler |
 | `git checkout week3day5-start` | My build so far, with the brief in `docs/COPILOT.md` |
 | `git checkout week3day5-end` | The finished product, with the UnderCover Copilot, a chat for handlers in the dashboard's sidebar |
+
+---
+
+## Author & Project Contributions
+
+**Built by Deepanshu Verma**
+
+### My Background & The Evolution to Agentic AI
+Prior to this project, my work primarily centered around traditional RAG (Retrieval-Augmented Generation) pipelines and foundational LLM applications. While standard RAG is powerful for informational queries, real-world enterprise operations require autonomous decision-making, resilience, deterministic guardrails, and human oversight.
+
+Through this project and Ed Donner's **AI FDE: Forward Deployed Engineer & Agentic AI Architect** curriculum, I expanded my focus into next-generation agentic systems:
+
+- **LangChain & Harness Engineering:** Designing autonomous agent reasoning harnesses equipped with domain tools (policy lookup, decision logic, payout rules) instead of brittle prompt chains.
+- **LangGraph & Durable State:** Orchestrating cyclical agent workflows, checkpointing, and human-in-the-loop escalation paths for high-value claims.
+- **Evals & Observability:** Benchmarking agent accuracy against human handler ground-truth labels and tracking operational metrics.
+- **Agent Swarms & Multi-Agent Systems:** Structuring dispatcher swarms for parallel claim resolution and high-volume workloads.
+- **Enterprise Security & Guardrails:** Implementing pre-execution prompt injection detection (defending against adversarial inputs like `CLM-1901`), financial PII masking, and API key authentication.
+- **Production Full-Stack Architecture:** Integrating an asynchronous FastAPI backend, a real-time React + TypeScript claims dashboard, automated bulk CSV ingestion, and automated Playwright E2E test suites.
+
+This repository reflects my hands-on implementation of the core claims platform, autonomous agent decision loop, security middleware, and interactive handler dashboard.
+
