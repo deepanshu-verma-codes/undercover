@@ -11,6 +11,8 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from agent.guardrail import check_prompt_injection
+
 load_dotenv(override=True)
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -47,7 +49,9 @@ DEFAULT_SYSTEM_PROMPT = (
 def backend() -> httpx.Client:
     """Return a client for the UnderCover backend."""
     url = os.getenv("BACKEND_URL", BACKEND_URL)
-    return httpx.Client(base_url=url, timeout=10)
+    api_key = os.getenv("UNDERCOVER_API_KEY", "")
+    headers = {"X-API-Key": api_key} if api_key else {}
+    return httpx.Client(base_url=url, headers=headers, timeout=10)
 
 
 def get_instructions_text() -> str:
@@ -156,6 +160,23 @@ def model() -> ChatOpenAI:
 
 def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     """Run the agent on one claim and return its final reply."""
+    with backend() as client:
+        res = client.get(f"/api/claims/{claim_id}")
+        if res.status_code == HTTP_OK:
+            claim_data = res.json()
+            is_injection, reason = check_prompt_injection(claim_data)
+            if is_injection:
+                client.post(
+                    f"/api/claims/{claim_id}/decision",
+                    json={
+                        "decision": "refer",
+                        "payout": 0.0,
+                        "reason": reason,
+                        "policy_section": "Security Guardrail",
+                    },
+                )
+                return f"Security referral: {reason}"
+
     instructions = get_instructions_text()
     agent = create_agent(llm or model(), tools=AGENT_TOOLS, system_prompt=instructions)
     result = agent.invoke(

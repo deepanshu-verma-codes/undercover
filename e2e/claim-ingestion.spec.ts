@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+const API_KEY =
+  process.env.UNDERCOVER_API_KEY ??
+  "iz5mGyn3Gvb-79aenJfV1eifk_oQ9pp8nuVNpgl_MEQ";
+
 test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:8000/api/reset");
 });
@@ -22,6 +26,7 @@ test("handler creates a new claim via form with immediate agent audit", async ({
 
       if (body.run_agent) {
         await request.post(`http://127.0.0.1:8000/api/claims/${cid}/decision`, {
+          headers: { "x-api-key": API_KEY },
           data: {
             decision: "approve",
             payout: body.amount_claimed,
@@ -30,6 +35,7 @@ test("handler creates a new claim via form with immediate agent audit", async ({
           },
         });
         await request.post(`http://127.0.0.1:8000/api/claims/${cid}/pay`, {
+          headers: { "x-api-key": API_KEY },
           data: { amount: body.amount_claimed },
         });
       }
@@ -75,7 +81,7 @@ test("handler creates a new claim via form with immediate agent audit", async ({
   // Go back to queue and check total count increased
   await page.getByRole("button", { name: "← Back to queue" }).click();
   const allTab = page.getByRole("button", { name: "All Claims", exact: true });
-  await expect(allTab.locator(".tab-count")).toHaveText("26");
+  await expect(allTab.locator(".tab-count")).toHaveText("27");
 });
 
 test("handler uploads claims via CSV with immediate batch audit", async ({
@@ -104,6 +110,7 @@ test("handler uploads claims via CSV with immediate batch audit", async ({
         await request.post(
           `http://127.0.0.1:8000/api/claims/${c.claim_id}/decision`,
           {
+            headers: { "x-api-key": API_KEY },
             data: {
               decision: "approve",
               payout: c.amount_claimed,
@@ -150,7 +157,7 @@ test("handler uploads claims via CSV with immediate batch audit", async ({
   // Close modal
   await page.getByRole("button", { name: "Done" }).click();
 
-  // Verify queue updated with 26 claims
+  // Verify queue updated with 27 claims
   const allTab = page.getByRole("button", { name: "All Claims", exact: true });
-  await expect(allTab.locator(".tab-count")).toHaveText("26");
+  await expect(allTab.locator(".tab-count")).toHaveText("27");
 });

@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+const API_KEY =
+  process.env.UNDERCOVER_API_KEY ??
+  "iz5mGyn3Gvb-79aenJfV1eifk_oQ9pp8nuVNpgl_MEQ";
+
 test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:8000/api/reset");
 });
@@ -10,6 +14,7 @@ test("high-value claim requires handler sign-off before payout completes", async
 }) => {
   // Pre-set claim CLM-1003 with approval over $1,000 threshold
   await request.post("http://127.0.0.1:8000/api/claims/CLM-1003/decision", {
+    headers: { "x-api-key": API_KEY },
     data: {
       decision: "approve",
       payout: 1500.0,
@@ -31,9 +36,14 @@ test("high-value claim requires handler sign-off before payout completes", async
     ),
   ).toBeVisible();
 
-  // Sign off and pay
+  // Verify regular handler cannot sign off
   const signoffBtn = page.getByRole("button", { name: "Sign off & Pay" });
   await expect(signoffBtn).toBeVisible();
+  await expect(signoffBtn).toBeDisabled();
+
+  // Switch to supervisor role to authorize sign-off
+  await page.getByRole("combobox", { name: "Role" }).selectOption("supervisor");
+  await expect(signoffBtn).toBeEnabled();
   await signoffBtn.click();
 
   // Verify claim transitions to decided

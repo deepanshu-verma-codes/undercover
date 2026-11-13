@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+const API_KEY =
+  process.env.UNDERCOVER_API_KEY ??
+  "iz5mGyn3Gvb-79aenJfV1eifk_oQ9pp8nuVNpgl_MEQ";
+
 test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:8000/api/reset");
 });
@@ -14,9 +18,11 @@ test("agent workflow assesses and decides a standard claim", async ({
   // Intercept agent run endpoint to simulate deterministic agent evaluation
   await page.route("**/api/claims/CLM-1001/run", async (route) => {
     await request.post("http://127.0.0.1:8000/api/claims/CLM-1001/activity", {
+      headers: { "x-api-key": API_KEY },
       data: { action: "Reviewing policy wording Section 3" },
     });
     await request.post("http://127.0.0.1:8000/api/claims/CLM-1001/decision", {
+      headers: { "x-api-key": API_KEY },
       data: {
         decision: "approve",
         payout: 420.0,
@@ -26,6 +32,7 @@ test("agent workflow assesses and decides a standard claim", async ({
       },
     });
     await request.post("http://127.0.0.1:8000/api/claims/CLM-1001/pay", {
+      headers: { "x-api-key": API_KEY },
       data: { amount: 420.0 },
     });
     const updated = await request.get(

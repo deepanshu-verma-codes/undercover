@@ -15,7 +15,7 @@ def test_database_seed_and_reads(tmp_path, monkeypatch):
         claims_count = conn.execute("SELECT count(*) as cnt FROM claims").fetchone()[
             "cnt"
         ]
-        assert claims_count == 25
+        assert claims_count == 26
 
         policies_count = conn.execute(
             "SELECT count(*) as cnt FROM policies"
@@ -48,7 +48,7 @@ def test_database_seed_and_reads(tmp_path, monkeypatch):
     res = client.get("/api/claims")
     assert res.status_code == 200
     claims = res.json()
-    assert len(claims) == 25
+    assert len(claims) == 26
     assert claims[0]["status"] == "waiting"
 
     # Get single claim

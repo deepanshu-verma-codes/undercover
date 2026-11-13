@@ -4,12 +4,14 @@ interface DecisionProps {
   readonly claim: Claim;
   readonly signingOff: boolean;
   readonly onSignOff: () => void;
+  readonly handlerRole?: "handler" | "supervisor";
 }
 
 export function DecisionSection({
   claim,
   signingOff,
   onSignOff,
+  handlerRole = "handler",
 }: DecisionProps) {
   if (!claim.decision) return null;
 
@@ -39,13 +41,94 @@ export function DecisionSection({
           <button
             className="btn btn-signoff"
             onClick={onSignOff}
-            disabled={signingOff}
-            style={{ width: "100%" }}
+            disabled={signingOff || handlerRole !== "supervisor"}
+            title={
+              handlerRole !== "supervisor"
+                ? "Supervisor role required to sign off payouts"
+                : undefined
+            }
+            style={{
+              width: "100%",
+              opacity: handlerRole !== "supervisor" ? 0.6 : 1,
+              cursor: handlerRole !== "supervisor" ? "not-allowed" : "pointer",
+            }}
           >
             {signingOff ? "Signing off..." : "Sign off & Pay"}
           </button>
+          {handlerRole !== "supervisor" && (
+            <p
+              style={{
+                fontSize: "12px",
+                color: "var(--crimson)",
+                marginTop: "6px",
+              }}
+            >
+              Supervisor role required to sign off payouts.
+            </p>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+interface ItemsProps {
+  readonly items: Claim["items"];
+  readonly totalAmount: number;
+}
+
+export function ItemsClaimedSection({ items, totalAmount }: ItemsProps) {
+  return (
+    <div className="panel">
+      <h2>Items Claimed</h2>
+      <table className="items-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Category</th>
+            <th style={{ textAlign: "right" }}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, idx) => (
+            <tr key={idx}>
+              <td>{item.description}</td>
+              <td style={{ textTransform: "capitalize" }}>{item.category}</td>
+              <td className="mono" style={{ textAlign: "right" }}>
+                ${item.amount.toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ textAlign: "right", marginTop: "12px", fontWeight: 700 }}>
+        Total Claimed: <span className="mono">${totalAmount.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+}
+
+interface DocumentsProps {
+  readonly documents: Claim["documents"];
+}
+
+export function DocumentsListSection({ documents }: DocumentsProps) {
+  return (
+    <div className="panel">
+      <h2>Supporting Documents</h2>
+      <div className="documents-list">
+        {documents.map((doc, idx) => (
+          <div key={idx} className="document-card">
+            <div className="document-card-header">
+              <span>{doc.name}</span>
+              <span className="mono" style={{ opacity: 0.7 }}>
+                {doc.type}
+              </span>
+            </div>
+            <div className="document-content">{doc.content}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

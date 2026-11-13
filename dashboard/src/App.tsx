@@ -11,6 +11,7 @@ export function App() {
   const [status, setStatus] = useState<string>("checking");
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [role, setRole] = useState<"handler" | "supervisor">("handler");
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isNewClaimOpen, setIsNewClaimOpen] = useState<boolean>(false);
   const [isUploadCsvOpen, setIsUploadCsvOpen] = useState<boolean>(false);
@@ -122,6 +123,23 @@ export function App() {
           <span className={`backend-badge ${status}`}>Backend: {status}</span>
         </div>
         <div className="header-actions">
+          <div className="role-selector-container">
+            <label htmlFor="role-select" className="role-label">
+              Role:
+            </label>
+            <select
+              id="role-select"
+              aria-label="Role"
+              className="role-select"
+              value={role}
+              onChange={(e) => {
+                setRole(e.target.value as "handler" | "supervisor");
+              }}
+            >
+              <option value="handler">Handler</option>
+              <option value="supervisor">Supervisor</option>
+            </select>
+          </div>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -137,6 +155,7 @@ export function App() {
         {selectedClaim ? (
           <ClaimDetail
             claim={selectedClaim}
+            handlerRole={role}
             onBack={() => {
               setSelectedClaimId(null);
             }}

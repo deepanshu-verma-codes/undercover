@@ -367,6 +367,10 @@ it("handles handler sign-off for high-value claims", async () => {
   await screen.findByText("CLM-1003");
   fireEvent.click(screen.getByText("CLM-1003"));
 
+  // Switch to supervisor role to enable sign-off
+  const roleSelect = screen.getByRole("combobox", { name: "Role" });
+  fireEvent.change(roleSelect, { target: { value: "supervisor" } });
+
   const signoffBtn = await screen.findByRole("button", {
     name: "Sign off & Pay",
   });
@@ -375,6 +379,7 @@ it("handles handler sign-off for high-value claims", async () => {
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith("/api/claims/CLM-1003/sign-off", {
       method: "POST",
+      headers: { "X-Handler-Role": "supervisor" },
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/claims/CLM-1003/pay",

@@ -675,3 +675,36 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Role Selector */
+.role-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.role-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+}
+
+.role-select {
+  background-color: var(--white);
+  color: var(--midnight);
+  border: 1px solid var(--seamist);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.role-select:focus {
+  border-color: var(--primary);
+}

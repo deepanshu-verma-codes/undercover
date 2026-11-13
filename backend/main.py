@@ -3,11 +3,14 @@
 import csv
 import io
 import json
+import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 import agent.main
@@ -19,6 +22,7 @@ from backend.database import (
     init_db,
     seed_db,
 )
+from backend.sanitizer import clean_user_input
 
 SYSTEM_INSTRUCTIONS = (
     "You are the UnderCover Agent, an expert claims handler at "
@@ -43,7 +47,27 @@ SYSTEM_INSTRUCTIONS = (
     "5. Log each step you take as you evaluate the claim."
 )
 
+load_dotenv(override=True)
+
 PAYOUT_LIMIT = 1000.0
+
+
+def get_api_key() -> str:
+    """Return the configured agent API key."""
+    return os.getenv("UNDERCOVER_API_KEY", "")
+
+
+def verify_api_key(request: Request) -> None:
+    """Verify that the request carries a valid agent API key."""
+    expected = get_api_key()
+    if not expected:
+        raise HTTPException(
+            status_code=401, detail="API key is not configured on server"
+        )
+    key = request.headers.get("x-api-key", "")
+    if not key or not secrets.compare_digest(key, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
 
 CSV_SAMPLE_TEMPLATE = (
     "policy_id,customer_id,claim_type,incident_date,"
@@ -160,14 +184,25 @@ def create_claim(req: ClaimCreateRequest) -> dict[str, Any]:
     """Create a new claim in the queue and optionally run the agent."""
     init_db()
     submitted_on = req.submitted_on or datetime.now(UTC).date().isoformat()
+    summary = clean_user_input(req.summary)
+    story = clean_user_input(req.story)
+    location = clean_user_input(req.incident_location)
     items = req.items
     if not items:
         items = [
             {
-                "description": req.summary,
+                "description": summary,
                 "category": req.claim_type,
                 "amount": req.amount_claimed,
             }
+        ]
+    else:
+        items = [
+            {
+                **item,
+                "description": clean_user_input(str(item.get("description", ""))),
+            }
+            for item in items
         ]
     documents = req.documents
 
@@ -194,9 +229,9 @@ def create_claim(req: ClaimCreateRequest) -> dict[str, Any]:
                 req.claim_type,
                 submitted_on,
                 req.incident_date,
-                req.incident_location,
-                req.summary,
-                req.story,
+                location,
+                summary,
+                story,
                 req.amount_claimed,
                 json.dumps(items),
                 json.dumps(documents),
@@ -261,7 +296,9 @@ def _parse_csv_row(
         ) from err
 
     claim_type = row.get("claim_type", "").strip() or "general"
-    summary = row.get("summary", "").strip() or "Imported claim"
+    summary = clean_user_input(row.get("summary", "").strip() or "Imported claim")
+    story = clean_user_input(row.get("story", "").strip() or summary)
+    location = clean_user_input(row.get("incident_location", "").strip() or "Unknown")
     items = _parse_items_or_docs(row.get("items", "").strip())
     if not items:
         items = [
@@ -270,6 +307,14 @@ def _parse_csv_row(
                 "category": claim_type,
                 "amount": amount_claimed,
             }
+        ]
+    else:
+        items = [
+            {
+                **item,
+                "description": clean_user_input(str(item.get("description", ""))),
+            }
+            for item in items
         ]
     docs = _parse_items_or_docs(row.get("documents", "").strip())
 
@@ -280,9 +325,9 @@ def _parse_csv_row(
         "claim_type": claim_type,
         "submitted_on": row.get("submitted_on", "").strip() or today,
         "incident_date": row.get("incident_date", "").strip() or today,
-        "incident_location": row.get("incident_location", "").strip() or "Unknown",
+        "incident_location": location,
         "summary": summary,
-        "story": row.get("story", "").strip() or summary,
+        "story": story,
         "amount_claimed": amount_claimed,
         "items": json.dumps(items),
         "documents": json.dumps(docs),
@@ -415,8 +460,11 @@ def get_customer(customer_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/claims/{claim_id}/decision", operation_id="decide_claim")
-def decide_claim(claim_id: str, req: DecisionRequest) -> dict[str, Any]:
+def decide_claim(
+    claim_id: str, req: DecisionRequest, request: Request
+) -> dict[str, Any]:
     """Record an assessment decision for a claim."""
+    verify_api_key(request)
     init_db()
     with get_connection() as conn:
         row = conn.execute(
@@ -465,7 +513,7 @@ def decide_claim(claim_id: str, req: DecisionRequest) -> dict[str, Any]:
 
 
 @app.post("/api/claims/{claim_id}/pay", operation_id="pay_claim")
-def pay_claim(claim_id: str, req: PayRequest) -> dict[str, Any]:
+def pay_claim(claim_id: str, req: PayRequest, request: Request) -> dict[str, Any]:
     """Process a payment for an approved claim."""
     init_db()
     with get_connection() as conn:
@@ -474,6 +522,15 @@ def pay_claim(claim_id: str, req: PayRequest) -> dict[str, Any]:
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Claim not found")
+
+        # Allow payment without API key only if claim has been signed off by a handler
+        key = request.headers.get("x-api-key", "")
+        expected = get_api_key()
+        is_valid_agent = bool(
+            expected and key and secrets.compare_digest(key, expected)
+        )
+        if not is_valid_agent and not row["signed_off"]:
+            verify_api_key(request)
 
         if req.amount > PAYOUT_LIMIT and not row["signed_off"]:
             raise HTTPException(
@@ -501,8 +558,15 @@ def pay_claim(claim_id: str, req: PayRequest) -> dict[str, Any]:
 
 
 @app.post("/api/claims/{claim_id}/sign-off", operation_id="sign_off_claim")
-def sign_off_claim(claim_id: str) -> dict[str, Any]:
-    """Approve a high-value claim payout by a handler."""
+def sign_off_claim(claim_id: str, request: Request) -> dict[str, Any]:
+    """Approve a high-value claim payout by a supervisor."""
+    role = request.headers.get("x-handler-role", "handler").lower().strip()
+    if role != "supervisor":
+        raise HTTPException(
+            status_code=403,
+            detail="Supervisor role required to sign off payouts",
+        )
+
     init_db()
     with get_connection() as conn:
         row = conn.execute(
@@ -543,8 +607,11 @@ def get_claim_activity(claim_id: str) -> list[dict[str, Any]]:
 
 
 @app.post("/api/claims/{claim_id}/activity", operation_id="log_claim_activity")
-def log_claim_activity(claim_id: str, req: ActivityRequest) -> dict[str, str]:
+def log_claim_activity(
+    claim_id: str, req: ActivityRequest, request: Request
+) -> dict[str, str]:
     """Log an activity step for a claim."""
+    verify_api_key(request)
     init_db()
     with get_connection() as conn:
         row = conn.execute(

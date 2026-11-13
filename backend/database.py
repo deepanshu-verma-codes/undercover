@@ -93,90 +93,93 @@ def init_db(db_path: str | None = None) -> None:
 
 
 def _seed_claims(conn: sqlite3.Connection) -> None:
-    path = DATA_DIR / "claims.json"
-    if not path.exists():
-        return
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    for c in data:
-        conn.execute(
-            """
-            INSERT INTO claims (
-                claim_id, policy_id, customer_id, claim_type, submitted_on,
-                incident_date, incident_location, summary, story,
-                amount_claimed, items, documents, status, paid, signed_off
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', 0, 0)
-            """,
-            (
-                c["claim_id"],
-                c["policy_id"],
-                c["customer_id"],
-                c["claim_type"],
-                c["submitted_on"],
-                c["incident_date"],
-                c["incident_location"],
-                c["summary"],
-                c["story"],
-                c["amount_claimed"],
-                json.dumps(c.get("items", [])),
-                json.dumps(c.get("documents", [])),
-            ),
-        )
+    paths = [DATA_DIR / "claims.json", DATA_DIR / "security" / "claims.json"]
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        for c in data:
+            conn.execute(
+                """
+                INSERT INTO claims (
+                    claim_id, policy_id, customer_id, claim_type, submitted_on,
+                    incident_date, incident_location, summary, story,
+                    amount_claimed, items, documents, status, paid, signed_off
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', 0, 0)
+                """,
+                (
+                    c["claim_id"],
+                    c["policy_id"],
+                    c["customer_id"],
+                    c["claim_type"],
+                    c["submitted_on"],
+                    c["incident_date"],
+                    c["incident_location"],
+                    c["summary"],
+                    c["story"],
+                    c["amount_claimed"],
+                    json.dumps(c.get("items", [])),
+                    json.dumps(c.get("documents", [])),
+                ),
+            )
 
 
 def _seed_policies(conn: sqlite3.Connection) -> None:
-    path = DATA_DIR / "policies.json"
-    if not path.exists():
-        return
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    for p in data:
-        conn.execute(
-            """
-            INSERT INTO policies (
-                policy_id, customer_id, plan, add_ons, purchased_on,
-                sold_through, trip, travelers, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                p["policy_id"],
-                p["customer_id"],
-                p["plan"],
-                json.dumps(p.get("add_ons", [])),
-                p["purchased_on"],
-                p["sold_through"],
-                json.dumps(p.get("trip", {})),
-                json.dumps(p.get("travelers", [])),
-                p["status"],
-            ),
-        )
+    paths = [DATA_DIR / "policies.json", DATA_DIR / "security" / "policies.json"]
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        for p in data:
+            conn.execute(
+                """
+                INSERT INTO policies (
+                    policy_id, customer_id, plan, add_ons, purchased_on,
+                    sold_through, trip, travelers, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    p["policy_id"],
+                    p["customer_id"],
+                    p["plan"],
+                    json.dumps(p.get("add_ons", [])),
+                    p["purchased_on"],
+                    p["sold_through"],
+                    json.dumps(p.get("trip", {})),
+                    json.dumps(p.get("travelers", [])),
+                    p["status"],
+                ),
+            )
 
 
 def _seed_customers(conn: sqlite3.Connection) -> None:
-    path = DATA_DIR / "customers.json"
-    if not path.exists():
-        return
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    for cust in data:
-        conn.execute(
-            """
-            INSERT INTO customers (
-                customer_id, name, email, phone, date_of_birth,
-                address, customer_since, previous_claims
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                cust["customer_id"],
-                cust["name"],
-                cust["email"],
-                cust["phone"],
-                cust["date_of_birth"],
-                json.dumps(cust.get("address", {})),
-                cust["customer_since"],
-                json.dumps(cust.get("previous_claims", [])),
-            ),
-        )
+    paths = [DATA_DIR / "customers.json", DATA_DIR / "security" / "customers.json"]
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        for cust in data:
+            conn.execute(
+                """
+                INSERT INTO customers (
+                    customer_id, name, email, phone, date_of_birth,
+                    address, customer_since, previous_claims
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cust["customer_id"],
+                    cust["name"],
+                    cust["email"],
+                    cust["phone"],
+                    cust["date_of_birth"],
+                    json.dumps(cust.get("address", {})),
+                    cust["customer_since"],
+                    json.dumps(cust.get("previous_claims", [])),
+                ),
+            )
 
 
 def _seed_plans_and_company(conn: sqlite3.Connection) -> None:

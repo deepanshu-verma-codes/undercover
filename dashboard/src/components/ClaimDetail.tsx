@@ -4,6 +4,8 @@ import {
   ActivitySection,
   CustomerSection,
   DecisionSection,
+  DocumentsListSection,
+  ItemsClaimedSection,
   PolicySection,
 } from "./ClaimDetailSections";
 
@@ -11,14 +13,21 @@ interface Props {
   readonly claim: Claim;
   readonly onBack: () => void;
   readonly onRefreshClaim: (claimId: string) => Promise<void>;
+  readonly handlerRole?: "handler" | "supervisor";
 }
 
-export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
+export function ClaimDetail({
+  claim,
+  onBack,
+  onRefreshClaim,
+  handlerRole = "handler",
+}: Props) {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [activities, setActivities] = useState<ClaimActivity[]>([]);
   const [running, setRunning] = useState<boolean>(false);
   const [signingOff, setSigningOff] = useState<boolean>(false);
+  const [signOffError, setSignOffError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDetails = async () => {
@@ -30,7 +39,10 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
         if (custRes.ok) setCustomer((await custRes.json()) as Customer);
 
         const actRes = await fetch(`/api/claims/${claim.claim_id}/activity`);
-        if (actRes.ok) setActivities((await actRes.json()) as ClaimActivity[]);
+        if (actRes.ok) {
+          const actData = (await actRes.json()) as unknown;
+          if (Array.isArray(actData)) setActivities(actData as ClaimActivity[]);
+        }
       } catch {
         // Ignore network errors
       }
@@ -41,7 +53,10 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
   const refreshActivities = async () => {
     try {
       const actRes = await fetch(`/api/claims/${claim.claim_id}/activity`);
-      if (actRes.ok) setActivities((await actRes.json()) as ClaimActivity[]);
+      if (actRes.ok) {
+        const actData = (await actRes.json()) as unknown;
+        if (Array.isArray(actData)) setActivities(actData as ClaimActivity[]);
+      }
     } catch {
       // Ignore network errors
     }
@@ -58,7 +73,10 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
               `/api/claims/${claim.claim_id}/activity`,
             );
             if (actRes.ok) {
-              setActivities((await actRes.json()) as ClaimActivity[]);
+              const actData = (await actRes.json()) as unknown;
+              if (Array.isArray(actData)) {
+                setActivities(actData as ClaimActivity[]);
+              }
             }
           } catch {
             // Ignore network errors
@@ -86,8 +104,19 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
 
   const handleSignOff = async () => {
     setSigningOff(true);
+    setSignOffError(null);
     try {
-      await fetch(`/api/claims/${claim.claim_id}/sign-off`, { method: "POST" });
+      const res = await fetch(`/api/claims/${claim.claim_id}/sign-off`, {
+        method: "POST",
+        headers: { "X-Handler-Role": handlerRole },
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as {
+          detail?: string;
+        };
+        setSignOffError(err.detail ?? "Sign-off failed");
+        return;
+      }
       if (claim.payout) {
         await fetch(`/api/claims/${claim.claim_id}/pay`, {
           method: "POST",
@@ -153,64 +182,32 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
             </div>
           </div>
 
-          <div className="panel">
-            <h2>Items Claimed</h2>
-            <table className="items-table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Category</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {claim.items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td>{item.description}</td>
-                    <td style={{ textTransform: "capitalize" }}>
-                      {item.category}
-                    </td>
-                    <td className="mono" style={{ textAlign: "right" }}>
-                      ${item.amount.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div
-              style={{
-                textAlign: "right",
-                marginTop: "12px",
-                fontWeight: 700,
-              }}
-            >
-              Total Claimed:{" "}
-              <span className="mono">${claim.amount_claimed.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div className="panel">
-            <h2>Supporting Documents</h2>
-            <div className="documents-list">
-              {claim.documents.map((doc, idx) => (
-                <div key={idx} className="document-card">
-                  <div className="document-card-header">
-                    <span>{doc.name}</span>
-                    <span className="mono" style={{ opacity: 0.7 }}>
-                      {doc.type}
-                    </span>
-                  </div>
-                  <div className="document-content">{doc.content}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ItemsClaimedSection
+            items={claim.items}
+            totalAmount={claim.amount_claimed}
+          />
+          <DocumentsListSection documents={claim.documents} />
         </div>
 
         <div className="detail-sidebar">
+          {signOffError && (
+            <div
+              style={{
+                backgroundColor: "#fee2e2",
+                color: "#991b1b",
+                padding: "10px 14px",
+                borderRadius: "6px",
+                marginBottom: "12px",
+                fontSize: "13px",
+              }}
+            >
+              {signOffError}
+            </div>
+          )}
           <DecisionSection
             claim={claim}
             signingOff={signingOff}
+            handlerRole={handlerRole}
             onSignOff={() => {
               void handleSignOff();
             }}

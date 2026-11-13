@@ -10,9 +10,10 @@ from backend.main import app
 def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_claims.db")
     monkeypatch.setenv("DB_PATH", test_db)
+    monkeypatch.setenv("UNDERCOVER_API_KEY", "test-key-32chars-minimum-sample!!")
     database.seed_db(test_db)
 
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-API-Key": "test-key-32chars-minimum-sample!!"})
 
     # Standard claim under $1,000 (CLM-1001)
     res = client.post(
@@ -35,6 +36,27 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     assert res.json()["status"] == "decided"
     assert res.json()["paid"] is True
 
+    # Decline claim
+    res = client.post(
+        "/api/claims/CLM-1002/decision",
+        json={
+            "decision": "decline",
+            "payout": 0.0,
+            "reason": "Loss not covered.",
+            "policy_section": "9. General exclusions",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "decided"
+
+
+def test_claim_high_value_sign_off_flow(tmp_path, monkeypatch):
+    test_db = str(tmp_path / "test_signoff.db")
+    monkeypatch.setenv("DB_PATH", test_db)
+    monkeypatch.setenv("UNDERCOVER_API_KEY", "test-key-32chars-minimum-sample!!")
+    database.seed_db(test_db)
+    client = TestClient(app, headers={"X-API-Key": "test-key-32chars-minimum-sample!!"})
+
     # High-value claim over $1,000 (CLM-1003)
     res = client.post(
         "/api/claims/CLM-1003/decision",
@@ -53,8 +75,10 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     assert res.status_code == 400
     assert "Payout over $1,000 requires handler sign-off" in res.json()["detail"]
 
-    # Handler signs off
-    res = client.post("/api/claims/CLM-1003/sign-off")
+    # Supervisor signs off
+    res = client.post(
+        "/api/claims/CLM-1003/sign-off", headers={"X-Handler-Role": "supervisor"}
+    )
     assert res.status_code == 200
     assert res.json()["signed_off"] is True
 
@@ -64,18 +88,13 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     assert res.json()["status"] == "decided"
     assert res.json()["paid"] is True
 
-    # Decline claim
-    res = client.post(
-        "/api/claims/CLM-1002/decision",
-        json={
-            "decision": "decline",
-            "payout": 0.0,
-            "reason": "Loss not covered.",
-            "policy_section": "9. General exclusions",
-        },
-    )
-    assert res.status_code == 200
-    assert res.json()["status"] == "decided"
+
+def test_claim_activity_and_run_flow(tmp_path, monkeypatch):
+    test_db = str(tmp_path / "test_act.db")
+    monkeypatch.setenv("DB_PATH", test_db)
+    monkeypatch.setenv("UNDERCOVER_API_KEY", "test-key-32chars-minimum-sample!!")
+    database.seed_db(test_db)
+    client = TestClient(app, headers={"X-API-Key": "test-key-32chars-minimum-sample!!"})
 
     # Activity logging and reading
     res = client.post(
@@ -88,7 +107,7 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     res = client.get("/api/claims/CLM-1001/activity")
     assert res.status_code == 200
     activities = res.json()
-    assert len(activities) >= 2
+    assert len(activities) >= 1
     assert any("Reading policy" in a["action"] for a in activities)
 
     # Run agent endpoint test
@@ -122,7 +141,13 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
         client.post("/api/claims/NONEXISTENT/pay", json={"amount": 100.0}).status_code
         == 404
     )
-    assert client.post("/api/claims/NONEXISTENT/sign-off").status_code == 404
+    assert (
+        client.post(
+            "/api/claims/NONEXISTENT/sign-off",
+            headers={"X-Handler-Role": "supervisor"},
+        ).status_code
+        == 404
+    )
     assert client.get("/api/claims/NONEXISTENT/activity").status_code == 404
     assert (
         client.post(
@@ -135,8 +160,9 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
 def test_create_claim_flow(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_create_claim.db")
     monkeypatch.setenv("DB_PATH", test_db)
+    monkeypatch.setenv("UNDERCOVER_API_KEY", "test-key-32chars-minimum-sample!!")
     database.seed_db(test_db)
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-API-Key": "test-key-32chars-minimum-sample!!"})
 
     # 1. Create with manual ID
     res = client.post(
@@ -203,8 +229,9 @@ def test_create_claim_flow(tmp_path, monkeypatch):
 def test_csv_template_and_upload(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_csv.db")
     monkeypatch.setenv("DB_PATH", test_db)
+    monkeypatch.setenv("UNDERCOVER_API_KEY", "test-key-32chars-minimum-sample!!")
     database.seed_db(test_db)
-    client = TestClient(app)
+    client = TestClient(app, headers={"X-API-Key": "test-key-32chars-minimum-sample!!"})
 
     # 1. Template check
     tmpl_res = client.get("/api/claims/csv-template")

@@ -1,6 +1,7 @@
 """Unit tests for the UnderCover agent and its tools."""
 
 import json
+import os
 
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -19,11 +20,16 @@ class StubModel(GenericFakeChatModel):
         return self
 
 
+def _make_test_client() -> TestClient:
+    key = os.getenv("UNDERCOVER_API_KEY", "")
+    return TestClient(app, headers={"X-API-Key": key})
+
+
 def test_agent_tools(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_agent_tools.db")
     monkeypatch.setenv("DB_PATH", test_db)
     database.seed_db(test_db)
-    monkeypatch.setattr(main, "backend", lambda: TestClient(app))
+    monkeypatch.setattr(main, "backend", _make_test_client)
 
     # Instructions
     instructions = main.get_instructions_text()
@@ -83,7 +89,7 @@ def test_agent_run_standard_claim(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_agent_run.db")
     monkeypatch.setenv("DB_PATH", test_db)
     database.seed_db(test_db)
-    monkeypatch.setattr(main, "backend", lambda: TestClient(app))
+    monkeypatch.setattr(main, "backend", _make_test_client)
 
     replies = [
         AIMessage(
@@ -140,7 +146,7 @@ def test_agent_run_high_value_claim(tmp_path, monkeypatch):
     test_db = str(tmp_path / "test_agent_high.db")
     monkeypatch.setenv("DB_PATH", test_db)
     database.seed_db(test_db)
-    monkeypatch.setattr(main, "backend", lambda: TestClient(app))
+    monkeypatch.setattr(main, "backend", _make_test_client)
 
     replies = [
         AIMessage(
@@ -219,10 +225,10 @@ def test_agent_cli(tmp_path, monkeypatch, capsys):
     # All waiting claims
     replies_waiting = [
         AIMessage(content="Assessed"),
-    ] * 25
+    ] * 26
     stub_waiting = StubModel(messages=iter(replies_waiting))
     all_waiting = cli.run_agent_cli(None, llm=stub_waiting)
-    assert len(all_waiting) == 25
+    assert len(all_waiting) == 26
 
     # All claims when queue is empty of waiting claims
     with database.get_connection(test_db) as conn:
