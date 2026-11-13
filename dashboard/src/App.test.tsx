@@ -122,6 +122,8 @@ it("shows that the backend is up", async () => {
   expect(await screen.findByText("Backend: up")).toBeDefined();
   expect(await screen.findByText("CLM-1001")).toBeDefined();
   expect(await screen.findByText("CLM-1003")).toBeDefined();
+  expect(screen.getByText("Payout")).toBeDefined();
+  expect(screen.getAllByText("$120.00")).toHaveLength(2);
 });
 
 it("shows that the backend is down", async () => {
@@ -149,6 +151,8 @@ it("filters and searches claims in the queue", async () => {
 
   // Filter by waiting
   const waitingTab = screen.getByRole("button", { name: "Waiting" });
+  expect(waitingTab.textContent).toContain("Waiting");
+  expect(waitingTab.textContent).toContain("1");
   fireEvent.click(waitingTab);
   expect(screen.getByText("CLM-1001")).toBeDefined();
   expect(screen.queryByText("CLM-1003")).toBeNull();
@@ -413,5 +417,34 @@ it("opens and closes the agent instructions modal", async () => {
 
   await waitFor(() => {
     expect(screen.queryByText("Special instructions text")).toBeNull();
+  });
+});
+
+it("runs the agent on all claims from the queue view", async () => {
+  let runCalled = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/health")) {
+        return Promise.resolve(new Response(JSON.stringify({ status: "ok" })));
+      }
+      if (url.includes("/api/claims/CLM-1001/run")) {
+        runCalled = true;
+        return Promise.resolve(new Response(JSON.stringify({})));
+      }
+      if (url.includes("/api/claims")) {
+        return Promise.resolve(new Response(JSON.stringify(mockClaims)));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    }),
+  );
+
+  render(<App />);
+  const runAllBtn = await screen.findByRole("button", {
+    name: "Run Agent on All Claims",
+  });
+  fireEvent.click(runAllBtn);
+  await waitFor(() => {
+    expect(runCalled).toBe(true);
   });
 });

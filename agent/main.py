@@ -17,23 +17,27 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "openai/gpt-6-luna"
 
+HTTP_OK = 200
+PAYOUT_LIMIT = 1000.0
+
 DEFAULT_SYSTEM_PROMPT = (
     "You are the UnderCover Agent, an expert claims handler at "
     "UnderCover Travel Insurance.\n"
     "For the given claim:\n"
     "1. Retrieve the claim details, policy information, customer claim "
-    "history, and policy wording.\n"
+    "history, and policy wording using your tools.\n"
     "2. Check if the incident and claimed items are covered under the policy "
     "wording for the customer's plan, taking into account waiting periods, "
     "limits, and deductibles.\n"
-    "3. Decide whether to approve, decline, or refer the claim:\n"
-    "   - Approve: Calculate the exact payout according to the policy wording. "
-    "Submit the decision. If approved, attempt to pay the claim. If the payout "
-    "exceeds $1,000, explain that payment requires handler sign-off.\n"
-    "   - Decline: State clearly that the claim is declined and why under the "
-    "policy wording.\n"
-    "   - Refer: Refer when the claim requires human judgment or special "
-    "investigation.\n"
+    "3. You MUST always call the submit_decision tool to record your decision "
+    "(approve, decline, or refer):\n"
+    "   - Approve: Calculate the exact payout according to policy wording. "
+    "Call submit_decision with payout > 0. Then call pay_claim with the amount. "
+    "(Payouts over $1,000 will be blocked and wait for handler sign-off).\n"
+    "   - Decline: Call submit_decision with decision='decline' and payout=0.0, "
+    "stating why under the policy wording.\n"
+    "   - Refer: Call submit_decision with decision='refer' and payout=0.0, "
+    "explaining why human judgment or special investigation is required.\n"
     "4. In your decision, provide a concise explanation in two or three "
     "sentences, and cite the relevant section of the policy wording.\n"
     "5. Log each step you take as you evaluate the claim."
@@ -155,7 +159,54 @@ def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     instructions = get_instructions_text()
     agent = create_agent(llm or model(), tools=AGENT_TOOLS, system_prompt=instructions)
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": f"Assess claim {claim_id}"}]},
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"Assess claim {claim_id}. Use your tools to check policy "
+                        "wording and details, and call submit_decision to record it."
+                    ),
+                }
+            ]
+        },
         config={"configurable": {"thread_id": thread_id}},
     )
-    return result["messages"][-1].text
+    reply = result["messages"][-1].text
+
+    if llm is None:
+        with backend() as client:
+            res = client.get(f"/api/claims/{claim_id}")
+            if res.status_code == HTTP_OK:
+                claim_data = res.json()
+                if claim_data.get("status") == "waiting" or not claim_data.get(
+                    "decision"
+                ):
+                    follow_up = agent.invoke(
+                        {
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        f"Please record your decision for claim "
+                                        f"{claim_id} now by calling submit_decision."
+                                    ),
+                                }
+                            ]
+                        },
+                        config={"configurable": {"thread_id": thread_id}},
+                    )
+                    reply = follow_up["messages"][-1].text
+                    claim_data = client.get(f"/api/claims/{claim_id}").json()
+
+                if (
+                    claim_data.get("decision") == "approve"
+                    and not claim_data.get("paid")
+                    and (claim_data.get("payout") or 0.0) <= PAYOUT_LIMIT
+                ):
+                    client.post(
+                        f"/api/claims/{claim_id}/pay",
+                        json={"amount": claim_data["payout"]},
+                    )
+
+    return reply

@@ -11,6 +11,14 @@ test("queue page displays claims and allows filtering and search", async ({
   await expect(page.getByRole("heading", { name: "UnderCover" })).toBeVisible();
   await expect(page.getByText("Backend: up")).toBeVisible();
 
+  // Tab counts should reflect queue status
+  const allTab = page.getByRole("button", { name: "All Claims", exact: true });
+  await expect(allTab.locator(".tab-count")).toHaveText("25");
+  const waitingTab = page.getByRole("button", { name: "Waiting", exact: true });
+  await expect(waitingTab.locator(".tab-count")).toHaveText("25");
+  const decidedTab = page.getByRole("button", { name: "Decided", exact: true });
+  await expect(decidedTab.locator(".tab-count")).toHaveText("0");
+
   // All 25 claims should be listed
   const rows = page.locator("tbody tr");
   await expect(rows).toHaveCount(25);
@@ -32,8 +40,13 @@ test("queue page displays claims and allows filtering and search", async ({
   ).toBeVisible();
 
   // Reset to All Claims
-  await page.getByRole("button", { name: "All Claims" }).click();
+  await page.getByRole("button", { name: "All Claims", exact: true }).click();
   await expect(rows).toHaveCount(25);
+
+  // Run Agent on All Claims button is visible
+  await expect(
+    page.getByRole("button", { name: "Run Agent on All Claims" }),
+  ).toBeVisible();
 
   // Clicking a claim navigates to details
   await page.getByText("CLM-1001").click();

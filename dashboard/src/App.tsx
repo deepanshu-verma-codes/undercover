@@ -10,29 +10,65 @@ export function App() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isRunningAll, setIsRunningAll] = useState<boolean>(false);
+
+  const fetchClaimsList = async () => {
+    try {
+      const claimsRes = await fetch("/api/claims");
+      if (claimsRes.ok) {
+        const data = (await claimsRes.json()) as Claim[];
+        if (Array.isArray(data)) {
+          setClaims(data);
+        }
+      }
+    } catch {
+      // Ignore network errors
+    }
+  };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const healthRes = await fetch("/api/health");
-        setStatus(healthRes.ok ? "up" : "down");
-      } catch {
-        setStatus("down");
-      }
+    let isMounted = true;
 
+    const fetchClaims = async () => {
       try {
         const claimsRes = await fetch("/api/claims");
-        if (claimsRes.ok) {
+        if (claimsRes.ok && isMounted) {
           const data = (await claimsRes.json()) as Claim[];
           if (Array.isArray(data)) {
             setClaims(data);
           }
         }
       } catch {
-        setClaims([]);
+        if (isMounted) {
+          setClaims([]);
+        }
       }
     };
-    void init();
+
+    const fetchHealth = async () => {
+      try {
+        const healthRes = await fetch("/api/health");
+        if (isMounted) {
+          setStatus(healthRes.ok ? "up" : "down");
+        }
+      } catch {
+        if (isMounted) {
+          setStatus("down");
+        }
+      }
+    };
+
+    void fetchHealth();
+    void fetchClaims();
+
+    const interval = setInterval(() => {
+      void fetchClaims();
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleRefreshClaim = async (claimId: string) => {
@@ -46,6 +82,20 @@ export function App() {
       }
     } catch {
       // Ignore network errors
+    }
+  };
+
+  const handleRunAll = async () => {
+    setIsRunningAll(true);
+    try {
+      const waiting = claims.filter((c) => c.status === "waiting");
+      for (const c of waiting) {
+        await fetch(`/api/claims/${c.claim_id}/run`, { method: "POST" });
+        await fetchClaimsList();
+      }
+    } finally {
+      setIsRunningAll(false);
+      await fetchClaimsList();
     }
   };
 
@@ -85,6 +135,10 @@ export function App() {
             onSelectClaim={(c) => {
               setSelectedClaimId(c.claim_id);
             }}
+            onRunAll={() => {
+              void handleRunAll();
+            }}
+            isRunningAll={isRunningAll}
           />
         )}
       </main>

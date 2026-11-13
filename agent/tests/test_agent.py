@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
+from agent import __main__ as cli
 from agent import main
 from backend import database
 from backend.main import app
@@ -193,3 +194,53 @@ def test_model_name(monkeypatch):
     assert main.model().model_name == "openai/gpt-6-luna"
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
     assert main.model().model_name == "openrouter/free"
+
+
+def test_agent_cli(tmp_path, monkeypatch, capsys):
+    test_db = str(tmp_path / "test_cli.db")
+    monkeypatch.setenv("DB_PATH", test_db)
+    database.seed_db(test_db)
+    monkeypatch.setattr(cli, "get_backend", lambda: TestClient(app))
+
+    replies = [
+        AIMessage(content="Claim CLM-1001 assessed."),
+    ]
+    stub = StubModel(messages=iter(replies))
+
+    # Single claim
+    results = cli.run_agent_cli(["CLM-1001"], llm=stub)
+    assert len(results) == 1
+    assert results[0]["claim_id"] == "CLM-1001"
+
+    # Non-existent claim
+    empty = cli.run_agent_cli(["CLM-9999"], llm=stub)
+    assert empty == [{}]
+
+    # All waiting claims
+    replies_waiting = [
+        AIMessage(content="Assessed"),
+    ] * 25
+    stub_waiting = StubModel(messages=iter(replies_waiting))
+    all_waiting = cli.run_agent_cli(None, llm=stub_waiting)
+    assert len(all_waiting) == 25
+
+    # All claims when queue is empty of waiting claims
+    with database.get_connection(test_db) as conn:
+        conn.execute("UPDATE claims SET status = 'decided'")
+    no_waiting = cli.run_agent_cli(None, llm=stub)
+    assert no_waiting == []
+
+    # Help flag
+    monkeypatch.setattr("sys.argv", ["agent", "--help"])
+    cli.main_cli()
+    out = capsys.readouterr().out
+    assert "Usage" in out
+
+    # get_backend fallback
+    client = cli.get_backend()
+    assert client is not None
+
+    # main_cli with claim arg
+    monkeypatch.setattr("sys.argv", ["agent", "CLM-1001"])
+    monkeypatch.setattr(cli, "run_agent_cli", lambda args, llm=None: [{"status": "ok"}])
+    cli.main_cli()

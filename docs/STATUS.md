@@ -21,3 +21,20 @@ Pilot completed (Phases 1–6):
    ```bash
    npm run check
    ```
+4. Reset the database (resets all claims to `waiting` and clears decisions/logs):
+   ```bash
+   npm run db:reset
+   ```
+   *(Alternatively: `uv run -m backend.database` or `curl -X POST http://127.0.0.1:8000/api/reset` when the backend is running).*
+5. Run the LangChain agent to check claims:
+   ```bash
+   # Assess all waiting claims in the queue:
+   npm run agent
+
+   # Assess a specific claim:
+   npm run agent -- CLM-1001
+
+   # (Direct uv commands: uv run -m agent or uv run -m agent CLM-1001)
+   ```
+
+

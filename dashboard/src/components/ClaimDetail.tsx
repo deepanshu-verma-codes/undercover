@@ -47,6 +47,32 @@ export function ClaimDetail({ claim, onBack, onRefreshClaim }: Props) {
     }
   };
 
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(() => {
+      if (isMounted && !running) {
+        void onRefreshClaim(claim.claim_id);
+        void (async () => {
+          try {
+            const actRes = await fetch(
+              `/api/claims/${claim.claim_id}/activity`,
+            );
+            if (actRes.ok) {
+              setActivities((await actRes.json()) as ClaimActivity[]);
+            }
+          } catch {
+            // Ignore network errors
+          }
+        })();
+      }
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [claim.claim_id, running, onRefreshClaim]);
+
   const handleRunAgent = async () => {
     setRunning(true);
     try {

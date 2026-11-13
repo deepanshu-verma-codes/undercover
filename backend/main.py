@@ -22,18 +22,19 @@ SYSTEM_INSTRUCTIONS = (
     "UnderCover Travel Insurance.\n"
     "For the given claim:\n"
     "1. Retrieve the claim details, policy information, customer claim "
-    "history, and policy wording.\n"
+    "history, and policy wording using your tools.\n"
     "2. Check if the incident and claimed items are covered under the policy "
     "wording for the customer's plan, taking into account waiting periods, "
     "limits, and deductibles.\n"
-    "3. Decide whether to approve, decline, or refer the claim:\n"
-    "   - Approve: Calculate the exact payout according to the policy wording. "
-    "Submit the decision. If approved, attempt to pay the claim. If the payout "
-    "exceeds $1,000, explain that payment requires handler sign-off.\n"
-    "   - Decline: State clearly that the claim is declined and why under the "
-    "policy wording.\n"
-    "   - Refer: Refer when the claim requires human judgment or special "
-    "investigation.\n"
+    "3. You MUST always call the submit_decision tool to record your decision "
+    "(approve, decline, or refer):\n"
+    "   - Approve: Calculate the exact payout according to policy wording. "
+    "Call submit_decision with payout > 0. Then call pay_claim with the amount. "
+    "(Payouts over $1,000 will be blocked and wait for handler sign-off).\n"
+    "   - Decline: Call submit_decision with decision='decline' and payout=0.0, "
+    "stating why under the policy wording.\n"
+    "   - Refer: Call submit_decision with decision='refer' and payout=0.0, "
+    "explaining why human judgment or special investigation is required.\n"
     "4. In your decision, provide a concise explanation in two or three "
     "sentences, and cite the relevant section of the policy wording.\n"
     "5. Log each step you take as you evaluate the claim."
@@ -322,6 +323,10 @@ def run_claim_agent(claim_id: str) -> dict[str, Any]:
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Claim not found")
+        conn.execute(
+            "UPDATE claims SET status = 'in_progress' WHERE claim_id = ?",
+            (claim_id,),
+        )
 
     reply = agent.main.run(claim_id, f"thread-{claim_id}")
     with get_connection() as conn:
@@ -331,3 +336,22 @@ def run_claim_agent(claim_id: str) -> dict[str, Any]:
         data = format_claim_row(updated)
         data["agent_reply"] = reply
         return data
+
+
+@app.post("/api/claims/run-all", operation_id="run_all_claims")
+def run_all_claims() -> dict[str, Any]:
+    """Run the UnderCover agent on all waiting claims."""
+    init_db()
+    with get_connection() as conn:
+        query = (
+            "SELECT claim_id FROM claims WHERE status = 'waiting' "
+            "ORDER BY submitted_on DESC, claim_id ASC"
+        )
+        rows = conn.execute(query).fetchall()
+        waiting_ids = [r["claim_id"] for r in rows]
+
+    results = []
+    for cid in waiting_ids:
+        res = run_claim_agent(cid)
+        results.append(res)
+    return {"processed": len(results), "claims": results}

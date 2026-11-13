@@ -234,3 +234,8 @@ def format_claim_row(row: sqlite3.Row) -> dict[str, Any]:
     data["paid"] = bool(data["paid"])
     data["signed_off"] = bool(data["signed_off"])
     return data
+
+
+if __name__ == "__main__":
+    seed_db()
+    print("Database reset: all claims set to waiting.")

@@ -4,9 +4,16 @@ import type { Claim } from "../types";
 interface Props {
   readonly claims: readonly Claim[];
   readonly onSelectClaim: (claim: Claim) => void;
+  readonly onRunAll?: () => void;
+  readonly isRunningAll?: boolean;
 }
 
-export function ClaimsQueue({ claims, onSelectClaim }: Props) {
+export function ClaimsQueue({
+  claims,
+  onSelectClaim,
+  onRunAll,
+  isRunningAll = false,
+}: Props) {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
 
@@ -36,6 +43,16 @@ export function ClaimsQueue({ claims, onSelectClaim }: Props) {
     }
   };
 
+  const counts: Record<string, number> = {
+    all: claims.length,
+    waiting: claims.filter((c) => c.status === "waiting").length,
+    in_progress: claims.filter((c) => c.status === "in_progress").length,
+    waiting_for_sign_off: claims.filter(
+      (c) => c.status === "waiting_for_sign_off",
+    ).length,
+    decided: claims.filter((c) => c.status === "decided").length,
+  };
+
   return (
     <div className="panel">
       <div className="queue-controls">
@@ -46,27 +63,44 @@ export function ClaimsQueue({ claims, onSelectClaim }: Props) {
             "in_progress",
             "waiting_for_sign_off",
             "decided",
-          ].map((st) => (
-            <button
-              key={st}
-              className={`filter-tab ${filter === st ? "active" : ""}`}
-              onClick={() => {
-                setFilter(st);
-              }}
-            >
-              {st === "all" ? "All Claims" : getStatusLabel(st)}
-            </button>
-          ))}
+          ].map((st) => {
+            const label = st === "all" ? "All Claims" : getStatusLabel(st);
+            const count = counts[st] ?? 0;
+            return (
+              <button
+                key={st}
+                aria-label={label}
+                className={`filter-tab ${filter === st ? "active" : ""}`}
+                onClick={() => {
+                  setFilter(st);
+                }}
+              >
+                <span className="tab-label">{label}</span>
+                <span className="tab-count">{count}</span>
+              </button>
+            );
+          })}
         </div>
-        <input
-          type="text"
-          placeholder="Search claims..."
-          className="search-input"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-          }}
-        />
+        <div className="queue-actions">
+          <input
+            type="text"
+            placeholder="Search claims..."
+            className="search-input"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
+          />
+          {onRunAll && (
+            <button
+              className="btn btn-primary"
+              onClick={onRunAll}
+              disabled={isRunningAll || counts.waiting === 0}
+            >
+              {isRunningAll ? "Running Agent..." : "Run Agent on All Claims"}
+            </button>
+          )}
+        </div>
       </div>
 
       <table className="claims-table">
@@ -76,6 +110,7 @@ export function ClaimsQueue({ claims, onSelectClaim }: Props) {
             <th>Type</th>
             <th>Summary</th>
             <th>Amount Claimed</th>
+            <th>Payout</th>
             <th>Submitted</th>
             <th>Status</th>
           </tr>
@@ -96,6 +131,9 @@ export function ClaimsQueue({ claims, onSelectClaim }: Props) {
               </td>
               <td>{c.summary}</td>
               <td className="mono">${c.amount_claimed.toFixed(2)}</td>
+              <td className="mono">
+                {c.payout !== null ? `$${c.payout.toFixed(2)}` : "—"}
+              </td>
               <td className="mono">{c.submitted_on}</td>
               <td>
                 <span className={`status-badge ${c.status}`}>
@@ -107,7 +145,7 @@ export function ClaimsQueue({ claims, onSelectClaim }: Props) {
           {filtered.length === 0 && (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 style={{
                   textAlign: "center",
                   padding: "32px",

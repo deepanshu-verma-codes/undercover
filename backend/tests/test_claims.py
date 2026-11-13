@@ -99,6 +99,11 @@ def test_claim_decision_and_payment_flow(tmp_path, monkeypatch):
     assert res.status_code == 200
     assert res.json()["agent_reply"] == "Agent decided claim CLM-1001."
 
+    # Run all claims endpoint test
+    res = client.post("/api/claims/run-all")
+    assert res.status_code == 200
+    assert "processed" in res.json()
+
     # 404 tests
     assert client.post("/api/claims/NONEXISTENT/run").status_code == 404
     assert (
