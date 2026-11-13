@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: "e2e",
   outputDir: "e2e/test-results",
   reporter: "list",
+  workers: 1,
   use: { baseURL: "http://localhost:5173" },
   webServer: [
     {

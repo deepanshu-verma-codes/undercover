@@ -3,6 +3,8 @@ import "./styles.css";
 import { AgentInstructionsModal } from "./components/AgentInstructionsModal";
 import { ClaimDetail } from "./components/ClaimDetail";
 import { ClaimsQueue } from "./components/ClaimsQueue";
+import { NewClaimModal } from "./components/NewClaimModal";
+import { UploadCsvModal } from "./components/UploadCsvModal";
 import type { Claim } from "./types";
 
 export function App() {
@@ -10,6 +12,8 @@ export function App() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isNewClaimOpen, setIsNewClaimOpen] = useState<boolean>(false);
+  const [isUploadCsvOpen, setIsUploadCsvOpen] = useState<boolean>(false);
   const [isRunningAll, setIsRunningAll] = useState<boolean>(false);
 
   const fetchClaimsList = async () => {
@@ -99,6 +103,15 @@ export function App() {
     }
   };
 
+  const handleClaimCreated = (newClaim: Claim) => {
+    setClaims((prev) => [newClaim, ...prev]);
+    setSelectedClaimId(newClaim.claim_id);
+  };
+
+  const handleClaimsUploaded = (uploadedClaims: Claim[]) => {
+    setClaims((prev) => [...uploadedClaims, ...prev]);
+  };
+
   const selectedClaim = claims.find((c) => c.claim_id === selectedClaimId);
 
   return (
@@ -139,9 +152,31 @@ export function App() {
               void handleRunAll();
             }}
             isRunningAll={isRunningAll}
+            onOpenNewClaim={() => {
+              setIsNewClaimOpen(true);
+            }}
+            onOpenUploadCsv={() => {
+              setIsUploadCsvOpen(true);
+            }}
           />
         )}
       </main>
+
+      <NewClaimModal
+        isOpen={isNewClaimOpen}
+        onClose={() => {
+          setIsNewClaimOpen(false);
+        }}
+        onClaimCreated={handleClaimCreated}
+      />
+
+      <UploadCsvModal
+        isOpen={isUploadCsvOpen}
+        onClose={() => {
+          setIsUploadCsvOpen(false);
+        }}
+        onClaimsUploaded={handleClaimsUploaded}
+      />
 
       <AgentInstructionsModal
         isOpen={isModalOpen}

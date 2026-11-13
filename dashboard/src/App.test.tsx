@@ -448,3 +448,59 @@ it("runs the agent on all claims from the queue view", async () => {
     expect(runCalled).toBe(true);
   });
 });
+
+it("opens and closes new claim modal from queue view", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/health")) {
+        return Promise.resolve(new Response(JSON.stringify({ status: "ok" })));
+      }
+      if (url.includes("/api/claims")) {
+        return Promise.resolve(new Response(JSON.stringify(mockClaims)));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    }),
+  );
+
+  render(<App />);
+  const newClaimBtn = await screen.findByRole("button", {
+    name: "+ New Claim",
+  });
+  fireEvent.click(newClaimBtn);
+  expect(await screen.findByText("Submit New Claim")).toBeDefined();
+
+  const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+  fireEvent.click(cancelBtn);
+  await waitFor(() => {
+    expect(screen.queryByText("Submit New Claim")).toBeNull();
+  });
+});
+
+it("opens and closes upload csv modal from queue view", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/health")) {
+        return Promise.resolve(new Response(JSON.stringify({ status: "ok" })));
+      }
+      if (url.includes("/api/claims")) {
+        return Promise.resolve(new Response(JSON.stringify(mockClaims)));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    }),
+  );
+
+  render(<App />);
+  const uploadCsvBtn = await screen.findByRole("button", {
+    name: "Upload CSV",
+  });
+  fireEvent.click(uploadCsvBtn);
+  expect(await screen.findByText("Bulk Claims CSV Upload")).toBeDefined();
+
+  const doneBtn = screen.getByRole("button", { name: "Done" });
+  fireEvent.click(doneBtn);
+  await waitFor(() => {
+    expect(screen.queryByText("Bulk Claims CSV Upload")).toBeNull();
+  });
+});

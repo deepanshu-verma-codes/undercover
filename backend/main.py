@@ -1,5 +1,7 @@
 """The UnderCover backend."""
 
+import csv
+import io
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -11,6 +13,7 @@ from pydantic import BaseModel
 import agent.main
 from backend.database import (
     format_claim_row,
+    generate_next_claim_id,
     get_connection,
     get_policy_wording_text,
     init_db,
@@ -42,6 +45,19 @@ SYSTEM_INSTRUCTIONS = (
 
 PAYOUT_LIMIT = 1000.0
 
+CSV_SAMPLE_TEMPLATE = (
+    "policy_id,customer_id,claim_type,incident_date,"
+    "incident_location,summary,story,amount_claimed\n"
+    "POL-2001,CUS-3001,trip_delay,2026-06-25,"
+    '"London, UK","Delayed train to airport",'
+    '"Train broke down en route to Heathrow airport, causing a missed flight.",'
+    "380.00\n"
+    "POL-2002,CUS-3002,baggage_delay,2026-06-26,"
+    '"Tokyo, Japan","Delayed baggage on arrival",'
+    '"Luggage did not arrive on flight. Purchased emergency clothing.",'
+    "210.00\n"
+)
+
 
 class DecisionRequest(BaseModel):
     """Claim decision submission payload."""
@@ -62,6 +78,31 @@ class ActivityRequest(BaseModel):
     """Claim activity log payload."""
 
     action: str
+
+
+class ClaimCreateRequest(BaseModel):
+    """Claim creation submission payload."""
+
+    policy_id: str
+    customer_id: str
+    claim_type: str
+    incident_date: str
+    incident_location: str
+    summary: str
+    story: str
+    amount_claimed: float
+    claim_id: str = ""
+    submitted_on: str = ""
+    items: list[dict[str, Any]] = []
+    documents: list[dict[str, Any]] = []
+    run_agent: bool = False
+
+
+class CsvUploadRequest(BaseModel):
+    """CSV claims bulk upload payload."""
+
+    csv_content: str
+    run_agent: bool = False
 
 
 @asynccontextmanager
@@ -112,6 +153,213 @@ def list_claims() -> list[dict[str, Any]]:
             "SELECT * FROM claims ORDER BY submitted_on DESC, claim_id ASC"
         ).fetchall()
         return [format_claim_row(r) for r in rows]
+
+
+@app.post("/api/claims", status_code=201, operation_id="create_claim")
+def create_claim(req: ClaimCreateRequest) -> dict[str, Any]:
+    """Create a new claim in the queue and optionally run the agent."""
+    init_db()
+    submitted_on = req.submitted_on or datetime.now(UTC).date().isoformat()
+    items = req.items
+    if not items:
+        items = [
+            {
+                "description": req.summary,
+                "category": req.claim_type,
+                "amount": req.amount_claimed,
+            }
+        ]
+    documents = req.documents
+
+    with get_connection() as conn:
+        cid = req.claim_id.strip() if req.claim_id else generate_next_claim_id(conn)
+        existing = conn.execute(
+            "SELECT claim_id FROM claims WHERE claim_id = ?", (cid,)
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Claim {cid} already exists")
+
+        conn.execute(
+            """
+            INSERT INTO claims (
+                claim_id, policy_id, customer_id, claim_type, submitted_on,
+                incident_date, incident_location, summary, story,
+                amount_claimed, items, documents, status, paid, signed_off
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', 0, 0)
+            """,
+            (
+                cid,
+                req.policy_id,
+                req.customer_id,
+                req.claim_type,
+                submitted_on,
+                req.incident_date,
+                req.incident_location,
+                req.summary,
+                req.story,
+                req.amount_claimed,
+                json.dumps(items),
+                json.dumps(documents),
+            ),
+        )
+        ts = datetime.now(UTC).isoformat()
+        conn.execute(
+            "INSERT INTO activities (claim_id, timestamp, action) VALUES (?, ?, ?)",
+            (cid, ts, "Claim submitted"),
+        )
+
+    if req.run_agent:
+        return run_claim_agent(cid)
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM claims WHERE claim_id = ?", (cid,)).fetchone()
+        return format_claim_row(row)
+
+
+@app.get("/api/claims/csv-template", operation_id="get_csv_template")
+def get_csv_template() -> dict[str, str]:
+    """Return a sample CSV template for claim imports."""
+    return {"template": CSV_SAMPLE_TEMPLATE}
+
+
+def _parse_items_or_docs(raw_val: str) -> list[dict[str, Any]]:
+    """Parse JSON list from CSV field or return empty list."""
+    if not raw_val:
+        return []
+    try:
+        data = json.loads(raw_val)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _parse_csv_row(
+    row: dict[str, str], idx: int, conn: Any, today: str
+) -> dict[str, Any]:
+    """Parse and validate a single CSV row."""
+    policy_id = row.get("policy_id", "").strip()
+    customer_id = row.get("customer_id", "").strip()
+    if not policy_id or not customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Row {idx} is missing required policy_id or customer_id",
+        )
+
+    cid = row.get("claim_id", "").strip() or generate_next_claim_id(conn)
+    existing = conn.execute(
+        "SELECT claim_id FROM claims WHERE claim_id = ?", (cid,)
+    ).fetchone()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Claim {cid} already exists")
+
+    try:
+        amount_claimed = float(row.get("amount_claimed", 0.0))
+    except ValueError as err:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Row {idx} has invalid amount_claimed",
+        ) from err
+
+    claim_type = row.get("claim_type", "").strip() or "general"
+    summary = row.get("summary", "").strip() or "Imported claim"
+    items = _parse_items_or_docs(row.get("items", "").strip())
+    if not items:
+        items = [
+            {
+                "description": summary,
+                "category": claim_type,
+                "amount": amount_claimed,
+            }
+        ]
+    docs = _parse_items_or_docs(row.get("documents", "").strip())
+
+    return {
+        "claim_id": cid,
+        "policy_id": policy_id,
+        "customer_id": customer_id,
+        "claim_type": claim_type,
+        "submitted_on": row.get("submitted_on", "").strip() or today,
+        "incident_date": row.get("incident_date", "").strip() or today,
+        "incident_location": row.get("incident_location", "").strip() or "Unknown",
+        "summary": summary,
+        "story": row.get("story", "").strip() or summary,
+        "amount_claimed": amount_claimed,
+        "items": json.dumps(items),
+        "documents": json.dumps(docs),
+    }
+
+
+@app.post("/api/claims/upload-csv", status_code=201, operation_id="upload_claims_csv")
+def upload_claims_csv(req: CsvUploadRequest) -> dict[str, Any]:
+    """Upload and ingest claims from CSV content and optionally run the agent."""
+    init_db()
+    content = req.csv_content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="CSV content cannot be empty")
+
+    reader = csv.DictReader(io.StringIO(content))
+    if not reader.fieldnames:
+        raise HTTPException(
+            status_code=400, detail="Invalid CSV format: no headers found"
+        )
+
+    imported_ids: list[str] = []
+    ts = datetime.now(UTC).isoformat()
+    today = datetime.now(UTC).date().isoformat()
+
+    with get_connection() as conn:
+        for idx, row in enumerate(reader, start=1):
+            claim_data = _parse_csv_row(row, idx, conn, today)
+            cid = claim_data["claim_id"]
+            conn.execute(
+                """
+                INSERT INTO claims (
+                    claim_id, policy_id, customer_id, claim_type, submitted_on,
+                    incident_date, incident_location, summary, story,
+                    amount_claimed, items, documents, status, paid, signed_off
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', 0, 0)
+                """,
+                (
+                    cid,
+                    claim_data["policy_id"],
+                    claim_data["customer_id"],
+                    claim_data["claim_type"],
+                    claim_data["submitted_on"],
+                    claim_data["incident_date"],
+                    claim_data["incident_location"],
+                    claim_data["summary"],
+                    claim_data["story"],
+                    claim_data["amount_claimed"],
+                    claim_data["items"],
+                    claim_data["documents"],
+                ),
+            )
+            conn.execute(
+                "INSERT INTO activities (claim_id, timestamp, action) VALUES (?, ?, ?)",
+                (cid, ts, "Claim imported from CSV"),
+            )
+            imported_ids.append(cid)
+
+    imported_claims = []
+    decided_count = 0
+    for cid in imported_ids:
+        if req.run_agent:
+            res = run_claim_agent(cid)
+            imported_claims.append(res)
+            if res.get("status") in ("decided", "waiting_for_sign_off"):
+                decided_count += 1
+        else:
+            with get_connection() as conn:
+                r = conn.execute(
+                    "SELECT * FROM claims WHERE claim_id = ?", (cid,)
+                ).fetchone()
+                imported_claims.append(format_claim_row(r))
+
+    return {
+        "imported_count": len(imported_claims),
+        "claims": imported_claims,
+        "decided_count": decided_count,
+    }
 
 
 @app.get("/api/claims/{claim_id}", operation_id="get_claim")

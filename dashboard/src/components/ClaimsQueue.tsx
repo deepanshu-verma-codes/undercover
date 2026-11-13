@@ -6,6 +6,8 @@ interface Props {
   readonly onSelectClaim: (claim: Claim) => void;
   readonly onRunAll?: () => void;
   readonly isRunningAll?: boolean;
+  readonly onOpenNewClaim?: () => void;
+  readonly onOpenUploadCsv?: () => void;
 }
 
 export function ClaimsQueue({
@@ -13,6 +15,8 @@ export function ClaimsQueue({
   onSelectClaim,
   onRunAll,
   isRunningAll = false,
+  onOpenNewClaim,
+  onOpenUploadCsv,
 }: Props) {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
@@ -91,6 +95,16 @@ export function ClaimsQueue({
               setSearch(e.target.value);
             }}
           />
+          {onOpenNewClaim && (
+            <button className="btn btn-secondary" onClick={onOpenNewClaim}>
+              + New Claim
+            </button>
+          )}
+          {onOpenUploadCsv && (
+            <button className="btn btn-secondary" onClick={onOpenUploadCsv}>
+              Upload CSV
+            </button>
+          )}
           {onRunAll && (
             <button
               className="btn btn-primary"

@@ -236,6 +236,21 @@ def format_claim_row(row: sqlite3.Row) -> dict[str, Any]:
     return data
 
 
+def generate_next_claim_id(conn: sqlite3.Connection) -> str:
+    """Generate the next sequential claim ID."""
+    rows = conn.execute("SELECT claim_id FROM claims").fetchall()
+    max_num = 1000
+    for r in rows:
+        cid = r["claim_id"]
+        if cid.startswith("CLM-"):
+            try:
+                num = int(cid[4:])
+                max_num = max(max_num, num)
+            except ValueError:
+                pass
+    return f"CLM-{max_num + 1}"
+
+
 if __name__ == "__main__":
     seed_db()
     print("Database reset: all claims set to waiting.")
