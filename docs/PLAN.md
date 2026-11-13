@@ -112,11 +112,11 @@ The agent accesses data strictly through the backend's published API, keeping do
 Presenting the claims queue with immediate status filters and detailed claim records gives claims handlers full visibility into operational backlog. Building the read-only instructions modal fulfills the operational requirement to audit agent behavior directly from the dashboard.
 
 ### Success criteria
-- [ ] `npm run check:ts` passes (prettier, eslint, tsc, vitest >= 80% coverage).
-- [ ] In the browser (`http://localhost:5173/`), the dashboard displays the UnderCover header and the queue table with 25 claims.
-- [ ] Status badges show correct brand colors (e.g. Sea Green for decided, Marigold for waiting for sign-off, Coral for in progress).
-- [ ] Clicking a claim in the table navigates to that claim's full detail screen with story, items, and attached documents.
-- [ ] Clicking "Agent Instructions" opens the modal displaying the read-only agent prompt.
+- [x] `npm run check:ts` passes (prettier, eslint, tsc, vitest >= 80% coverage).
+- [x] In the browser (`http://localhost:5173/`), the dashboard displays the UnderCover header and the queue table with 25 claims.
+- [x] Status badges show correct brand colors (e.g. Sea Green for decided, Marigold for waiting for sign-off, Coral for in progress).
+- [x] Clicking a claim in the table navigates to that claim's full detail screen with story, items, and attached documents.
+- [x] Clicking "Agent Instructions" opens the modal displaying the read-only agent prompt.
 
 ---
 
@@ -139,11 +139,11 @@ Presenting the claims queue with immediate status filters and detailed claim rec
 Claims handlers need transparency into how the AI arrived at its conclusion and must retain authoritative control over high-value payments. The activity log reveals every tool call, and the sign-off workflow allows handlers to review the agent's reasoning before releasing payouts over $1,000.
 
 ### Success criteria
-- [ ] Vitest component tests for `ClaimDetail`, `ActivityStream`, and `DecisionCard` pass with >= 80% coverage.
-- [ ] Clicking "Run Agent" on a waiting claim triggers the agent and populates the activity stream with tool steps.
-- [ ] On completion of a claim under $1,000, the decision card displays the approved payout, concise reason, and policy section.
-- [ ] On completion of a claim over $1,000, the status badge reflects `waiting_for_sign_off` and the sign-off banner appears.
-- [ ] Clicking "Sign off and Pay" unblocks the payment, successfully transitions the claim status to `decided`, and updates the dashboard.
+- [x] Vitest component tests for `ClaimDetail`, `ActivityStream`, and `DecisionCard` pass with >= 80% coverage.
+- [x] Clicking "Run Agent" on a waiting claim triggers the agent and populates the activity stream with tool steps.
+- [x] On completion of a claim under $1,000, the decision card displays the approved payout, concise reason, and policy section.
+- [x] On completion of a claim over $1,000, the status badge reflects `waiting_for_sign_off` and the sign-off banner appears.
+- [x] Clicking "Sign off and Pay" unblocks the payment, successfully transitions the claim status to `decided`, and updates the dashboard.
 
 ---
 
@@ -161,7 +161,7 @@ Claims handlers need transparency into how the AI arrived at its conclusion and 
 End-to-end tests exercise the complete integration between the FastAPI backend, SQLite database, LangChain agent harness, and React frontend, ensuring all operational requirements and business constraints are met prior to user sign-off.
 
 ### Success criteria
-- [ ] `npx playwright test` runs and passes all e2e test specifications.
-- [ ] `npm run check:python` passes with zero ruff format/lint errors, zero pyright type issues, and >= 80% pytest coverage.
-- [ ] `npm run check:ts` passes with prettier formatting, zero eslint errors, zero tsc errors, and >= 80% vitest coverage.
-- [ ] `npm run check` exits with code 0 across Python, TypeScript, and Playwright suites.
+- [x] `npx playwright test` runs and passes all e2e test specifications.
+- [x] `npm run check:python` passes with zero ruff format/lint errors, zero pyright type issues, and >= 80% pytest coverage.
+- [x] `npm run check:ts` passes with prettier formatting, zero eslint errors, zero tsc errors, and >= 80% vitest coverage.
+- [x] `npm run check` exits with code 0 across Python, TypeScript, and Playwright suites.
