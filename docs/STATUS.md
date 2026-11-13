@@ -1,10 +1,7 @@
 # Status
 
-A hello-world skeleton with every check in place:
-
-- `backend/`: one route, `GET /api/health`
-- `agent/`: the entry point `run(claim_id, thread_id)`, with one tool that calls the health route
-- `dashboard/`: one page that shows whether the backend is up
-- `e2e/`: one test of that page
-
-Nothing of UnderCover is built yet. Update this file as you build.
+Phase 3 completed:
+- `backend/`: decision processing, separate payment endpoint with $1,000 threshold restriction, handler sign-off flow, activity logging, and `POST /api/claims/{claim_id}/run` to trigger agent execution.
+- `agent/`: complete UnderCover Agent with tools to reach claims, policies, customer history, policy wording, submit decisions, pay claims, and log activities through the backend API.
+- `dashboard/`: dashboard skeleton showing backend status.
+- `e2e/`: health check test.
